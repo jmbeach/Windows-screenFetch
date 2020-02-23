@@ -25,7 +25,7 @@ Function Screenfetch($distro)
     $SystemInfoCollection = . Get-SystemSpecifications;
     $LineToTitleMappings = . Get-LineToTitleMappings;
 
-    for ($line = 0; $line -lt $SystemInfoCollection.Count; $line++) 
+    for ($line = 0; $line -lt [System.Math]::Max($SystemInfoCollection.Count, $AsciiArt.Count); $line++) 
     {
         if ($AsciiArt.Count -gt $line) {
             $art = $AsciiArt[$line];
@@ -51,8 +51,7 @@ Function Screenfetch($distro)
         {
             Write-Host $SystemInfoCollection[$line] -f Red;
         }
-
-        elseif ($SystemInfoCollection[$line] -like '*:*') 
+        elseif ($SystemInfoCollection.Count -gt $line -and $SystemInfoCollection[$line] -like '*:*') 
         {
             $Seperator = ":";
             $Splitted = $SystemInfoCollection[$line].Split($seperator);
