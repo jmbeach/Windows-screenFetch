@@ -1,4 +1,4 @@
-Add-Type -AssemblyName System.Windows.Forms
+Add-Type -Path "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\System.Windows.Forms.dll"
 
 Function Get-SystemSpecifications() 
 {
@@ -62,27 +62,39 @@ Function Get-LineToTitleMappings()
 
 Function Get-UserInformation()
 {
-    return $env:USERNAME + "@" + (Get-WmiObject Win32_OperatingSystem).CSName;
+    return $env:USERNAME + "@" + (Get-OSInstance).CSName;
 }
 
 Function Get-OS()
 {
-    return (Get-WmiObject Win32_OperatingSystem).Caption + " " + 
-        (Get-WmiObject Win32_OperatingSystem).OSArchitecture;
+    $os = Get-OSInstance
+    return $os.Caption + " " + $os.OSArchitecture;
+}
+
+Function Get-OSInstance()
+{
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        return Get-CimInstance Win32_OperatingSystem;
+    } else {
+        return Get-WmiObject Win32_OperatingSystem
+    }
 }
 
 Function Get-Kernel()
 {
-    return (Get-WmiObject  Win32_OperatingSystem).Version;
+    return (Get-OSInstance).Version;
 }
 
 Function Get-Uptime()
 {
-    $Uptime = ((Get-WmiObject Win32_OperatingSystem).ConvertToDateTime(
-        (Get-WmiObject Win32_OperatingSystem).LocalDateTime) - 
-        (Get-WmiObject Win32_OperatingSystem).ConvertToDateTime(
-            (Get-WmiObject Win32_OperatingSystem).LastBootUpTime));
-
+    $os = Get-OSInstance
+    $Uptime = $null;
+    if ($PSVersionTable.PSVersion.Major -gt 5) {
+        $Uptime = $os.LocalDateTime - $os.LastBootUpTime
+    } else {
+        $Uptime = $os.ConvertToDateTime($os.LocalDateTime) - $os.ConvertToDateTime($os.LastBootUpTime);
+    }
+    
     $FormattedUptime =  $Uptime.Days.ToString() + "d " + $Uptime.Hours.ToString() + "h " + $Uptime.Minutes.ToString() + "m " + $Uptime.Seconds.ToString() + "s ";
     return $FormattedUptime;
 }
@@ -102,7 +114,7 @@ Function Get-Shell()
 Function Get-Display()
 {
     # This gives the current resolution
-    $videoMode = Get-WmiObject -Class Win32_VideoController;
+    $videoMode = Get-CimInstance Win32_VideoController;
     $Display = $videoMode.CurrentHorizontalResolution.ToString() + " x " + $videoMode.CurrentVerticalResolution.ToString() + " (" + $videoMode.CurrentRefreshRate.ToString() + "Hz)";
     return $Display;
 }
@@ -112,15 +124,15 @@ Function Get-Displays()
     $Displays = New-Object System.Collections.Generic.List[System.Object];
 
     # This gives the available resolutions
-    $monitors = Get-WmiObject -N "root\wmi" -Class WmiMonitorListedSupportedSourceModes
+    $monitors = Get-CimInstance -N "root\wmi" -Class WmiMonitorListedSupportedSourceModes
 
     foreach($monitor in $monitors) 
     {
         # Sort the available modes by display area (width*height)
-        $sortedResolutions = $monitor.MonitorSourceModes | sort -property {$_.HorizontalActivePixels * $_.VerticalActivePixels}
-        $maxResolutions = $sortedResolutions | select @{N="MaxRes";E={"$($_.HorizontalActivePixels) x $($_.VerticalActivePixels) "}}
+        $sortedResolutions = $monitor.MonitorSourceModes | Sort-Object -property {$_.HorizontalActivePixels * $_.VerticalActivePixels}
+        $maxResolutions = $sortedResolutions | Select-Object @{N="MaxRes";E={"$($_.HorizontalActivePixels) x $($_.VerticalActivePixels) "}}
 
-        $Displays.Add(($maxResolutions | select -last 1).MaxRes);
+        $Displays.Add(($maxResolutions | Select-Object -last 1).MaxRes);
     }
 
     if ($Displays.Count -eq 1) {
@@ -142,18 +154,18 @@ Function Get-Font()
 
 Function Get-CPU() 
 {
-    return (((Get-WmiObject Win32_Processor).Name) -replace '\s+', ' ');
+    return (((Get-CimInstance Win32_Processor).Name) -replace '\s+', ' ');
 }
 
 Function Get-GPU() 
 {
-    return (Get-WmiObject Win32_DisplayConfiguration).DeviceName;
+    return (Get-CimInstance Win32_DisplayConfiguration).DeviceName;
 }
 
 Function Get-RAM() 
 {
-    $FreeRam = ([math]::Truncate((Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory / 1KB)); 
-    $TotalRam = ([math]::Truncate((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory / 1MB));
+    $FreeRam = ([math]::Truncate((Get-OSInstance).FreePhysicalMemory / 1KB)); 
+    $TotalRam = ([math]::Truncate((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1MB));
     $UsedRam = $TotalRam - $FreeRam;
     $FreeRamPercent = ($FreeRam / $TotalRam) * 100;
     $FreeRamPercent = "{0:N0}" -f $FreeRamPercent;
@@ -167,19 +179,19 @@ Function Get-Disks()
 {     
     $FormattedDisks = New-Object System.Collections.Generic.List[System.Object];
 
-    $NumDisks = (Get-WmiObject Win32_LogicalDisk).Count;
+    $NumDisks = (Get-CimInstance Win32_LogicalDisk).Count;
 
     if ($NumDisks) 
     {
         for ($i=0; $i -lt ($NumDisks); $i++) 
         {
-            $DiskID = (Get-WmiObject Win32_LogicalDisk)[$i].DeviceId;
+            $DiskID = (Get-CimInstance Win32_LogicalDisk)[$i].DeviceId;
 
-            $DiskSize = (Get-WmiObject Win32_LogicalDisk)[$i].Size;
+            $DiskSize = (Get-CimInstance Win32_LogicalDisk)[$i].Size;
 
             if ($DiskSize -and $DiskSize -ne 0)
             {
-                $FreeDiskSize = (Get-WmiObject Win32_LogicalDisk)[$i].FreeSpace
+                $FreeDiskSize = (Get-CimInstance Win32_LogicalDisk)[$i].FreeSpace
                 $FreeDiskSizeGB = $FreeDiskSize / 1073741824;
                 $FreeDiskSizeGB = "{0:N0}" -f $FreeDiskSizeGB;
 
@@ -209,13 +221,13 @@ Function Get-Disks()
     }
     else 
     {
-        $DiskID = (Get-WmiObject Win32_LogicalDisk).DeviceId;
+        $DiskID = (Get-CimInstance Win32_LogicalDisk).DeviceId;
 
-        $FreeDiskSize = (Get-WmiObject Win32_LogicalDisk).FreeSpace
+        $FreeDiskSize = (Get-CimInstance Win32_LogicalDisk).FreeSpace
         $FreeDiskSizeGB = $FreeDiskSize / 1073741824;
         $FreeDiskSizeGB = "{0:N0}" -f $FreeDiskSizeGB;
 
-        $DiskSize = (Get-WmiObject Win32_LogicalDisk).Size;
+        $DiskSize = (Get-CimInstance Win32_LogicalDisk).Size;
         $DiskSizeGB = $DiskSize / 1073741824;
         $DiskSizeGB = "{0:N0}" -f $DiskSizeGB;
 
